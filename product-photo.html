@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>商品圖快速製作工具</title>
+    <!-- 引入 Tailwind CSS 進行快速樣式設定 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Fabric.js 處理畫布與圖層操作 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <!-- 引入 Phosphor Icons 圖示庫 -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        /* 自訂捲軸樣式 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        
+        /* 讓 input[type="color"] 更好看 */
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+            width: 100%;
+            height: 40px;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: none;
+            border-radius: 0.5rem;
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col font-sans overflow-hidden text-gray-800">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shadow-sm z-10 shrink-0">
+        <div class="flex items-center gap-2">
+            <i class="ph ph-magic-wand text-2xl text-blue-600"></i>
+            <h1 class="text-xl font-bold text-gray-800">商品圖快速製作工具</h1>
+        </div>
+        <div>
+            <button onclick="downloadImage()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                <i class="ph ph-download-simple text-lg"></i>
+                下載高畫質圖片
+            </button>
+        </div>
+    </header>
+
+    <!-- 主要內容區 -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- 左側控制面板 -->
+        <aside class="w-80 bg-white border-r border-gray-200 flex flex-col h-full overflow-y-auto shrink-0 z-10">
+            
+            <!-- 全局設定 -->
+            <div class="p-6 border-b border-gray-100">
+                <h2 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">基本設定</h2>
+                
+                <div class="mb-5">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">背景顏色</label>
+                    <div class="flex items-center gap-3">
+                        <input type="color" id="bg-color-picker" value="#fcfcfc" class="w-12 h-10">
+                        <input type="text" id="bg-color-hex" value="#fcfcfc" class="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase">
+                    </div>
+                </div>
+
+                <div class="mb-5">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-sm font-medium text-gray-700">參考虛線範圍 (px)</label>
+                        <button id="link-ratio-btn" class="text-blue-600 hover:text-blue-800 transition-colors" title="切換寬高比例連結">
+                            <i id="link-icon" class="ph ph-link text-lg"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1">
+                            <input type="number" id="ref-width" value="2500" min="100" max="4000" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-center">
+                            <span class="text-xs text-gray-500 text-center block mt-1">寬度</span>
+                        </div>
+                        <span class="text-gray-400">×</span>
+                        <div class="flex-1">
+                            <input type="number" id="ref-height" value="2500" min="100" max="3000" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-center">
+                            <span class="text-xs text-gray-500 text-center block mt-1">高度</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">加入商品圖片</label>
+                    <!-- 隱藏的檔案上傳輸入框 -->
+                    <input type="file" id="image-upload" accept="image/*" class="hidden">
+                    <button onclick="document.getElementById('image-upload').click()" class="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 px-4 py-3 rounded-lg font-medium transition-colors border-dashed">
+                        <i class="ph ph-image-square text-xl"></i>
+                        上傳去背商品照
+                    </button>
+                    <p class="text-xs text-gray-500 mt-2 text-center">💡 提示：您也可以直接按下 <kbd class="bg-gray-200 px-1 rounded">Ctrl+V</kbd> 貼上圖片</p>
+                </div>
+            </div>
+
+            <!-- 選取物件設定 (當有圖片被選取時才會顯示) -->
+            <div id="object-settings" class="p-6 opacity-50 pointer-events-none transition-opacity duration-200">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-sm font-bold text-gray-400 uppercase tracking-wider">商品立體光暈設定</h2>
+                    <span class="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full" id="selection-status">未選取圖片</span>
+                </div>
+
+                <div class="space-y-5">
+                    <!-- 光暈顏色與透明度 -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">光暈顏色</label>
+                        <input type="color" id="shadow-color" value="#000000" class="h-10">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium text-gray-700">透明度</label>
+                            <span id="shadow-opacity-val" class="text-sm text-gray-500">30%</span>
+                        </div>
+                        <input type="range" id="shadow-opacity" min="0" max="1" step="0.05" value="0.3" class="w-full accent-blue-600">
+                    </div>
+
+                    <!-- 光暈模糊度 -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium text-gray-700">模糊範圍 (擴散)</label>
+                            <span id="shadow-blur-val" class="text-sm text-gray-500">60px</span>
+                        </div>
+                        <input type="range" id="shadow-blur" min="0" max="150" step="1" value="60" class="w-full accent-blue-600">
+                    </div>
+
+                    <!-- 垂直與水平偏移 (製造立體深度) -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium text-gray-700">垂直位置 (深度)</label>
+                            <span id="shadow-offset-y-val" class="text-sm text-gray-500">0px</span>
+                        </div>
+                        <input type="range" id="shadow-offset-y" min="-100" max="100" step="1" value="0" class="w-full accent-blue-600">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium text-gray-700">水平位置</label>
+                            <span id="shadow-offset-x-val" class="text-sm text-gray-500">0px</span>
+                        </div>
+                        <input type="range" id="shadow-offset-x" min="-100" max="100" step="1" value="0" class="w-full accent-blue-600">
+                    </div>
+                </div>
+
+                <div class="mt-8 pt-6 border-t border-gray-100">
+                    <button id="delete-btn" class="w-full flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-lg font-medium transition-colors">
+                        <i class="ph ph-trash text-lg"></i>
+                        刪除選取的商品
+                    </button>
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- 畫布區域 -->
+        <section class="flex-1 bg-gray-200 relative overflow-hidden flex items-center justify-center" id="canvas-container">
+            <!-- 背景網格圖案提示這是一個透明視窗 (雖然畫布有預設背景色) -->
+            <div class="absolute inset-0 opacity-20 pointer-events-none" style="background-image: radial-gradient(#6b7280 1px, transparent 1px); background-size: 24px 24px;"></div>
+            
+            <!-- 貼心提示 (空畫布時顯示) -->
+            <div id="empty-hint" class="absolute z-0 flex flex-col items-center justify-center pointer-events-none text-gray-400">
+                <i class="ph ph-image text-6xl mb-4 opacity-50"></i>
+                <p class="text-lg font-medium">Ctrl + V 貼上您的商品圖</p>
+                <p class="text-sm mt-2 opacity-75">畫布實際尺寸為 4000 × 3000，目前為縮放預覽模式</p>
+            </div>
+
+            <!-- Fabric.js 畫布 -->
+            <div class="shadow-2xl z-10 transition-transform origin-center" id="canvas-wrapper">
+                <canvas id="main-canvas"></canvas>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 訊息提示組件 (Toast) -->
+    <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 bg-gray-800 text-white px-5 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50">
+        <i class="ph ph-check-circle text-green-400 text-xl"></i>
+        <span id="toast-msg">操作成功</span>
+    </div>
+
+    <script>
+        // --- 核心變數與常數 ---
+        const CANVAS_WIDTH = 4000;
+        const CANVAS_HIEGHT = 3000;
+        const DEFAULT_BG_COLOR = '#fcfcfc';
+        
+        let canvas;
+        let referenceBox, vLine, hLine;
+        
+        // --- 初始化 Fabric.js 畫布 ---
+        function initCanvas() {
+            canvas = new fabric.Canvas('main-canvas', {
+                width: CANVAS_WIDTH,
+                height: CANVAS_HIEGHT,
+                backgroundColor: DEFAULT_BG_COLOR,
+                preserveObjectStacking: true, // 保持圖層順序
+                selection: false // 禁用群組框選(方便單一商品操作)
+            });
+
+            // 繪製紅色虛線參考框 (預設 2500x2500)
+            referenceBox = new fabric.Rect({
+                width: 2500,
+                height: 2500,
+                left: CANVAS_WIDTH / 2,
+                top: CANVAS_HIEGHT / 2,
+                originX: 'center',
+                originY: 'center',
+                fill: 'transparent',
+                stroke: 'rgba(239, 68, 68, 0.6)', // 尾風紅 (Tailwind red-500)
+                strokeWidth: 4,
+                strokeDashArray: [20, 20],
+                selectable: false,
+                evented: false
+            });
+            
+            // 建立中心磁吸輔助線 (預設隱藏)
+            vLine = new fabric.Line([CANVAS_WIDTH / 2, 0, CANVAS_WIDTH / 2, CANVAS_HIEGHT], {
+                stroke: 'rgba(59, 130, 246, 0.8)', // Tailwind blue-500
+                strokeWidth: 4,
+                selectable: false,
+                evented: false,
+                visible: false
+            });
+            hLine = new fabric.Line([0, CANVAS_HIEGHT / 2, CANVAS_WIDTH, CANVAS_HIEGHT / 2], {
+                stroke: 'rgba(59, 130, 246, 0.8)',
+                strokeWidth: 4,
+                selectable: false,
+                evented: false,
+                visible: false
+            });
+            
+            canvas.add(referenceBox, vLine, hLine);
+
+            // 響應式縮放畫布以適應螢幕
+            resizeCanvasToFit();
+            window.addEventListener('resize', resizeCanvasToFit);
+
+            // 綁定事件監聽器 (選取物件時更新 UI)
+            canvas.on('selection:created', handleObjectSelected);
+            canvas.on('selection:updated', handleObjectSelected);
+            canvas.on('selection:cleared', handleObjectDeselected);
+            
+            // 處理吸附對齊功能
+            canvas.on('object:moving', handleSnapping);
+            canvas.on('mouse:up', () => {
+                // 放開滑鼠時隱藏十字輔助線
+                vLine.set('visible', false);
+                hLine.set('visible', false);
+                canvas.renderAll();
+            });
+
+            canvas.on('object:added', (e) => {
+                // 忽略參考線等非圖片物件
+                const activeObjects = canvas.getObjects().filter(o => o !== referenceBox && o !== vLine && o !== hLine);
+                if (activeObjects.length > 0) {
+                    document.getElementById('empty-hint').style.display = 'none';
+                }
+            });
+            canvas.on('object:removed', () => {
+                const activeObjects = canvas.getObjects().filter(o => o !== referenceBox && o !== vLine && o !== hLine);
+                if (activeObjects.length === 0) {
+                    document.getElementById('empty-hint').style.display = 'flex';
+                }
+            });
+        }
+
+        // --- 中心磁吸對齊邏輯 ---
+        function handleSnapping(e) {
+            const obj = e.target;
+            // 確保目標不是參考線或背景物件
+            if (!obj || obj === referenceBox || obj === vLine || obj === hLine) return;
+
+            const threshold = 50; // 磁吸距離判定(像素)
+            const cx = CANVAS_WIDTH / 2;
+            const cy = CANVAS_HIEGHT / 2;
+            const objCenter = obj.getCenterPoint();
+
+            let snappedX = false;
+            let snappedY = false;
+
+            if (Math.abs(objCenter.x - cx) < threshold) {
+                objCenter.x = cx;
+                snappedX = true;
+            }
+            if (Math.abs(objCenter.y - cy) < threshold) {
+                objCenter.y = cy;
+                snappedY = true;
+            }
+
+            if (snappedX || snappedY) {
+                // 將物件設定到吸附的中心點
+                obj.setPositionByOrigin(objCenter, 'center', 'center');
+            }
+
+            // 顯示或隱藏對應的輔助線
+            vLine.set('visible', snappedX);
+            hLine.set('visible', snappedY);
+        }
+
+        // --- 將 4000x3000 的虛擬畫布縮放至視覺容器內 ---
+        function resizeCanvasToFit() {
+            const container = document.getElementById('canvas-container');
+            const wrapper = document.getElementById('canvas-wrapper');
+            
+            // 取得容器可用大小 (預留一些 padding)
+            const availableWidth = container.clientWidth - 80;
+            const availableHeight = container.clientHeight - 80;
+
+            // 計算縮放比例
+            const scaleX = availableWidth / CANVAS_WIDTH;
+            const scaleY = availableHeight / CANVAS_HIEGHT;
+            const scale = Math.min(scaleX, scaleY);
+
+            // 使用 Fabric 的 setZoom，讓內部座標系統維持 4000x3000，但外觀縮小
+            canvas.setDimensions({
+                width: CANVAS_WIDTH * scale,
+                height: CANVAS_HIEGHT * scale
+            });
+            canvas.setZoom(scale);
+        }
+
+        // --- 剪貼簿貼上功能 (Ctrl+V) ---
+        window.addEventListener('paste', function(e) {
+            if (e.clipboardData && e.clipboardData.items) {
+                const items = e.clipboardData.items;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf("image") !== -1) {
+                        const blob = items[i].getAsFile();
+                        const url = URL.createObjectURL(blob);
+                        addImageToCanvas(url);
+                        showToast('圖片貼上成功！');
+                        e.preventDefault();
+                        break; // 一次處理一張
+                    }
+                }
+            }
+        });
+
+        // --- 檔案上傳功能 ---
+        document.getElementById('image-upload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                addImageToCanvas(url);
+                showToast('圖片上傳成功！');
+                // 清空 input 確保同檔案能再次觸發 change
+                e.target.value = ''; 
+            }
+        });
+
+        // --- 將圖片加入畫布並預設套用立體光暈 ---
+        function addImageToCanvas(url) {
+            fabric.Image.fromURL(url, function(img) {
+                // 為了適應 4000x3000 的大畫布，若圖片太小可稍微放大，但通常原圖匯入即可
+                // 設定預設的外光暈/陰影
+                img.set({
+                    shadow: new fabric.Shadow({
+                        color: 'rgba(0,0,0,0.3)',
+                        blur: 60,
+                        offsetX: 0,
+                        offsetY: 0
+                    }),
+                    cornerColor: '#2563eb',
+                    cornerStrokeColor: '#ffffff',
+                    cornerSize: 24, // 縮放點稍微放大方便操作
+                    transparentCorners: false,
+                    borderColor: '#2563eb',
+                    borderDashArray: [4, 4]
+                });
+
+                // 如果圖片大於畫布，則等比縮小
+                if (img.width > CANVAS_WIDTH * 0.8 || img.height > CANVAS_HIEGHT * 0.8) {
+                    img.scaleToWidth(CANVAS_WIDTH * 0.6);
+                }
+
+                canvas.add(img);
+                canvas.centerObject(img); // 置中
+                canvas.setActiveObject(img); // 自動選取新加入的圖片
+                canvas.renderAll();
+            });
+        }
+
+        // --- 背景顏色控制 ---
+        const bgColorPicker = document.getElementById('bg-color-picker');
+        const bgColorHex = document.getElementById('bg-color-hex');
+
+        function updateBackgroundColor(color) {
+            canvas.backgroundColor = color;
+            canvas.renderAll();
+            bgColorPicker.value = color;
+            bgColorHex.value = color;
+        }
+
+        bgColorPicker.addEventListener('input', (e) => updateBackgroundColor(e.target.value));
+        bgColorHex.addEventListener('change', (e) => {
+            let color = e.target.value;
+            if (!color.startsWith('#')) color = '#' + color;
+            updateBackgroundColor(color);
+        });
+
+        // --- 參考線範圍設定控制 ---
+        const refWidthInput = document.getElementById('ref-width');
+        const refHeightInput = document.getElementById('ref-height');
+        const linkRatioBtn = document.getElementById('link-ratio-btn');
+        const linkIcon = document.getElementById('link-icon');
+        
+        let isRatioLinked = true;
+        let currentRatio = 1; // 預設 2500/2500 = 1
+        
+        linkRatioBtn.addEventListener('click', () => {
+            isRatioLinked = !isRatioLinked;
+            if (isRatioLinked) {
+                linkIcon.classList.remove('ph-link-break');
+                linkIcon.classList.add('ph-link');
+                linkIcon.classList.replace('text-gray-400', 'text-blue-600');
+                // 重新鎖定時，以當前的寬高計算新比例
+                currentRatio = parseFloat(refWidthInput.value) / parseFloat(refHeightInput.value);
+            } else {
+                linkIcon.classList.remove('ph-link');
+                linkIcon.classList.add('ph-link-break');
+                linkIcon.classList.replace('text-blue-600', 'text-gray-400');
+            }
+        });
+
+        function updateReferenceBox(source) {
+            let w = parseFloat(refWidthInput.value) || 2500;
+            let h = parseFloat(refHeightInput.value) || 2500;
+            
+            if (isRatioLinked) {
+                if (source === 'width') {
+                    h = Math.round(w / currentRatio);
+                    refHeightInput.value = h;
+                } else if (source === 'height') {
+                    w = Math.round(h * currentRatio);
+                    refWidthInput.value = w;
+                }
+            }
+            
+            referenceBox.set({ width: w, height: h });
+            canvas.renderAll();
+        }
+
+        refWidthInput.addEventListener('input', () => updateReferenceBox('width'));
+        refHeightInput.addEventListener('input', () => updateReferenceBox('height'));
+
+        // --- 物件屬性面板控制 ---
+        const settingsPanel = document.getElementById('object-settings');
+        const statusBadge = document.getElementById('selection-status');
+        
+        // 輸入控制項
+        const shadowColorInput = document.getElementById('shadow-color');
+        const shadowOpacityInput = document.getElementById('shadow-opacity');
+        const shadowBlurInput = document.getElementById('shadow-blur');
+        const shadowOffsetXInput = document.getElementById('shadow-offset-x');
+        const shadowOffsetYInput = document.getElementById('shadow-offset-y');
+        
+        // 數值顯示標籤
+        const shadowOpacityVal = document.getElementById('shadow-opacity-val');
+        const shadowBlurVal = document.getElementById('shadow-blur-val');
+        const shadowOffsetXVal = document.getElementById('shadow-offset-x-val');
+        const shadowOffsetYVal = document.getElementById('shadow-offset-y-val');
+
+        function handleObjectSelected() {
+            const activeObj = canvas.getActiveObject();
+            if (!activeObj) return;
+
+            // 啟用面板
+            settingsPanel.classList.remove('opacity-50', 'pointer-events-none');
+            statusBadge.textContent = '已選取商品';
+            statusBadge.classList.replace('bg-gray-200', 'bg-blue-100');
+            statusBadge.classList.replace('text-gray-600', 'text-blue-700');
+
+            // 讀取當前物件的陰影設定並更新 UI
+            if (activeObj.shadow) {
+                const fColor = new fabric.Color(activeObj.shadow.color);
+                
+                shadowColorInput.value = '#' + fColor.toHex();
+                shadowOpacityInput.value = fColor.getAlpha();
+                shadowBlurInput.value = activeObj.shadow.blur;
+                shadowOffsetXInput.value = activeObj.shadow.offsetX;
+                shadowOffsetYInput.value = activeObj.shadow.offsetY;
+
+                // 更新文字數值
+                updateRangeLabels();
+            }
+        }
+
+        function handleObjectDeselected() {
+            // 停用面板
+            settingsPanel.classList.add('opacity-50', 'pointer-events-none');
+            statusBadge.textContent = '未選取圖片';
+            statusBadge.classList.replace('bg-blue-100', 'bg-gray-200');
+            statusBadge.classList.replace('text-blue-700', 'text-gray-600');
+        }
+
+        function updateRangeLabels() {
+            shadowOpacityVal.textContent = Math.round(shadowOpacityInput.value * 100) + '%';
+            shadowBlurVal.textContent = shadowBlurInput.value + 'px';
+            shadowOffsetXVal.textContent = shadowOffsetXInput.value + 'px';
+            shadowOffsetYVal.textContent = shadowOffsetYInput.value + 'px';
+        }
+
+        function applyShadowToActiveObject() {
+            const activeObj = canvas.getActiveObject();
+            if (!activeObj) return;
+
+            updateRangeLabels();
+
+            // 解析 Hex 顏色並與透明度組合成 RGBA
+            const hex = shadowColorInput.value;
+            const alpha = shadowOpacityInput.value;
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            const rgba = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+
+            // 套用新的陰影設定
+            activeObj.set('shadow', new fabric.Shadow({
+                color: rgba,
+                blur: parseInt(shadowBlurInput.value, 10),
+                offsetX: parseInt(shadowOffsetXInput.value, 10),
+                offsetY: parseInt(shadowOffsetYInput.value, 10)
+            }));
+            
+            canvas.renderAll();
+        }
+
+        // 綁定光暈設定的事件監聽器
+        shadowColorInput.addEventListener('input', applyShadowToActiveObject);
+        shadowOpacityInput.addEventListener('input', applyShadowToActiveObject);
+        shadowBlurInput.addEventListener('input', applyShadowToActiveObject);
+        shadowOffsetXInput.addEventListener('input', applyShadowToActiveObject);
+        shadowOffsetYInput.addEventListener('input', applyShadowToActiveObject);
+
+        // 刪除按鈕功能
+        document.getElementById('delete-btn').addEventListener('click', () => {
+            const activeObj = canvas.getActiveObject();
+            if (activeObj) {
+                canvas.remove(activeObj);
+                canvas.discardActiveObject();
+                canvas.renderAll();
+            }
+        });
+
+        // 支援 Delete 鍵刪除與鍵盤方向鍵微調
+        window.addEventListener('keydown', (e) => {
+            // 確保不是在輸入框內操作
+            if (e.target.tagName === 'INPUT') return;
+            
+            const activeObj = canvas.getActiveObject();
+            if (!activeObj) return;
+
+            // 刪除物件
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                canvas.remove(activeObj);
+                canvas.discardActiveObject();
+                canvas.renderAll();
+                return;
+            }
+
+            // 方向鍵微調位置
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault(); // 防止網頁捲動
+                const step = e.shiftKey ? 50 : 10; // 預設移動 10px，按住 Shift 移動 50px
+                
+                switch (e.key) {
+                    case 'ArrowUp': activeObj.top -= step; break;
+                    case 'ArrowDown': activeObj.top += step; break;
+                    case 'ArrowLeft': activeObj.left -= step; break;
+                    case 'ArrowRight': activeObj.left += step; break;
+                }
+                activeObj.setCoords(); // 更新物件的控制邊界
+                canvas.renderAll();
+            }
+        });
+
+        // --- 下載高畫質圖片 ---
+        function downloadImage() {
+            if (!canvas) return;
+
+            // 1. 先取消所有選取框並隱藏紅色參考線，避免被匯出
+            canvas.discardActiveObject();
+            referenceBox.set('visible', false);
+            canvas.renderAll();
+
+            // 2. 為了輸出 4000x3000 的原圖，我們需要計算回放倍率
+            // 因為先前的 setZoom 會縮小畫布，這裡使用 multiplier 來反向放大
+            const currentZoom = canvas.getZoom();
+            const exportMultiplier = 1 / currentZoom;
+
+            // 3. 匯出 DataURL (使用 JPEG 可以讓無透明背景的圖片檔案小很多，且品質佳)
+            const dataURL = canvas.toDataURL({
+                format: 'jpeg', 
+                quality: 1, // 最高品質
+                multiplier: exportMultiplier
+            });
+
+            // 4. 觸發下載
+            const link = document.createElement('a');
+            link.download = `商品圖_${new Date().getTime()}.jpg`;
+            link.href = dataURL;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // 5. 下載完畢後恢復顯示紅色參考線
+            referenceBox.set('visible', true);
+            canvas.renderAll();
+            
+            showToast('圖片下載成功！');
+        }
+
+        // --- 提示訊息小工具 ---
+        let toastTimeout;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // 啟動工具
+        window.onload = initCanvas;
+    </script>
+</body>
+</html>
