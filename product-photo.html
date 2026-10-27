@@ -37,7 +37,7 @@
         }
     </style>
 </head>
-<body class="bg-gray-50 h-screen flex flex-col font-sans overflow-hidden text-gray-800">
+<body class="bg-gray-50 h-[100dvh] flex flex-col font-sans overflow-hidden text-gray-800">
 
     <!-- 頂部導覽列 -->
     <header class="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shadow-sm z-10 shrink-0">
@@ -144,25 +144,25 @@
                     </div>
 
                     <div>
-                        <div class="flex justify-between mb-1">
-                            <label class="text-sm font-medium text-gray-700">水平位置</label>
-                            <span id="shadow-offset-x-val" class="text-sm text-gray-500">0px</span>
-                        </div>
-                        <input type="range" id="shadow-offset-x" min="-100" max="100" step="1" value="0" class="w-full accent-blue-600">
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-medium text-gray-700">水平位置</label>
+                        <span id="shadow-offset-x-val" class="text-sm text-gray-500">0px</span>
                     </div>
-                </div>
-
-                <div class="mt-8 pt-6 border-t border-gray-100">
-                    <button id="delete-btn" class="w-full flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-lg font-medium transition-colors">
-                        <i class="ph ph-trash text-lg"></i>
-                        刪除選取的商品
-                    </button>
+                    <input type="range" id="shadow-offset-x" min="-100" max="100" step="1" value="0" class="w-full accent-blue-600">
                 </div>
             </div>
 
-        </aside>
+            <div class="mt-8 pt-6 border-t border-gray-100 pb-8">
+                <button id="delete-btn" class="w-full flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-lg font-medium transition-colors">
+                    <i class="ph ph-trash text-lg"></i>
+                    刪除選取的商品
+                </button>
+            </div>
+        </div>
 
-        <!-- 畫布區域 -->
+    </aside>
+
+    <!-- 畫布區域 -->
         <section class="flex-1 bg-gray-200 relative overflow-hidden flex items-center justify-center" id="canvas-container">
             <!-- 背景網格圖案提示這是一個透明視窗 (雖然畫布有預設背景色) -->
             <div class="absolute inset-0 opacity-20 pointer-events-none" style="background-image: radial-gradient(#6b7280 1px, transparent 1px); background-size: 24px 24px;"></div>
