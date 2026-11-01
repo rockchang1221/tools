@@ -69,6 +69,22 @@
             <div class="p-4 md:p-6 border-b border-gray-100">
                 <h2 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">基本設定</h2>
                 
+                <!-- 新增：畫布尺寸設定 -->
+                <div class="mb-5">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">畫布尺寸 (px)</label>
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1">
+                            <input type="number" id="canvas-width-input" value="3000" min="100" max="8000" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-center">
+                            <span class="text-xs text-gray-500 text-center block mt-1">寬度</span>
+                        </div>
+                        <span class="text-gray-400">×</span>
+                        <div class="flex-1">
+                            <input type="number" id="canvas-height-input" value="3000" min="100" max="8000" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-center">
+                            <span class="text-xs text-gray-500 text-center block mt-1">高度</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="mb-5">
                     <label class="block text-sm font-medium text-gray-700 mb-2">背景顏色</label>
                     <div class="flex items-center gap-3">
@@ -178,7 +194,7 @@
                 <i class="ph ph-image text-4xl md:text-6xl mb-2 md:mb-4 opacity-50"></i>
                 <p class="text-base md:text-lg font-medium hidden md:block">Ctrl + V 貼上您的商品圖</p>
                 <p class="text-base md:text-lg font-medium md:hidden">請點擊上方按鈕上傳商品圖</p>
-                <p class="text-xs md:text-sm mt-2 opacity-75">畫布實際尺寸為 4000 × 3000，目前為縮放預覽模式</p>
+                <p id="hint-canvas-size" class="text-xs md:text-sm mt-2 opacity-75">畫布實際尺寸為 3000 × 3000，目前為縮放預覽模式</p>
             </div>
 
             <!-- Fabric.js 畫布 -->
@@ -197,8 +213,8 @@
 
     <script>
         // --- 核心變數與常數 ---
-        const CANVAS_WIDTH = 4000;
-        const CANVAS_HIEGHT = 3000;
+        let canvasWidth = 3000;
+        let canvasHeight = 3000;
         const DEFAULT_BG_COLOR = '#fcfcfc';
         
         let canvas;
@@ -207,8 +223,8 @@
         // --- 初始化 Fabric.js 畫布 ---
         function initCanvas() {
             canvas = new fabric.Canvas('main-canvas', {
-                width: CANVAS_WIDTH,
-                height: CANVAS_HIEGHT,
+                width: canvasWidth,
+                height: canvasHeight,
                 backgroundColor: DEFAULT_BG_COLOR,
                 preserveObjectStacking: true, // 保持圖層順序
                 selection: false // 禁用群組框選(方便單一商品操作)
@@ -218,8 +234,8 @@
             referenceBox = new fabric.Rect({
                 width: 2500,
                 height: 2500,
-                left: CANVAS_WIDTH / 2,
-                top: CANVAS_HIEGHT / 2,
+                left: canvasWidth / 2,
+                top: canvasHeight / 2,
                 originX: 'center',
                 originY: 'center',
                 fill: 'transparent',
@@ -231,14 +247,14 @@
             });
             
             // 建立中心磁吸輔助線 (預設隱藏)
-            vLine = new fabric.Line([CANVAS_WIDTH / 2, 0, CANVAS_WIDTH / 2, CANVAS_HIEGHT], {
+            vLine = new fabric.Line([canvasWidth / 2, 0, canvasWidth / 2, canvasHeight], {
                 stroke: 'rgba(59, 130, 246, 0.8)', // Tailwind blue-500
                 strokeWidth: 4,
                 selectable: false,
                 evented: false,
                 visible: false
             });
-            hLine = new fabric.Line([0, CANVAS_HIEGHT / 2, CANVAS_WIDTH, CANVAS_HIEGHT / 2], {
+            hLine = new fabric.Line([0, canvasHeight / 2, canvasWidth, canvasHeight / 2], {
                 stroke: 'rgba(59, 130, 246, 0.8)',
                 strokeWidth: 4,
                 selectable: false,
@@ -259,6 +275,7 @@
             
             // 處理吸附對齊功能
             canvas.on('object:moving', handleSnapping);
+            canvas.on('object:scaling', handleScaling); // 新增縮放時的邊界磁吸
             canvas.on('mouse:up', () => {
                 // 放開滑鼠時隱藏十字輔助線
                 vLine.set('visible', false);
@@ -281,40 +298,127 @@
             });
         }
 
-        // --- 中心磁吸對齊邏輯 ---
+        // --- 中心與邊界磁吸對齊邏輯 (移動時) ---
         function handleSnapping(e) {
             const obj = e.target;
-            // 確保目標不是參考線或背景物件
             if (!obj || obj === referenceBox || obj === vLine || obj === hLine) return;
 
-            const threshold = 50; // 磁吸距離判定(像素)
-            const cx = CANVAS_WIDTH / 2;
-            const cy = CANVAS_HIEGHT / 2;
+            const threshold = 50; // 中心磁吸距離
+            const edgeThreshold = 30; // 邊界磁吸距離
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            
+            let snappedToCenter = false;
+
+            // 1. 優先判斷中心磁吸 (不受陰影影響)
             const objCenter = obj.getCenterPoint();
-
-            let snappedX = false;
-            let snappedY = false;
-
             if (Math.abs(objCenter.x - cx) < threshold) {
                 objCenter.x = cx;
-                snappedX = true;
+                snappedToCenter = true;
             }
             if (Math.abs(objCenter.y - cy) < threshold) {
                 objCenter.y = cy;
-                snappedY = true;
+                snappedToCenter = true;
             }
 
-            if (snappedX || snappedY) {
-                // 將物件設定到吸附的中心點
+            if (snappedToCenter) {
                 obj.setPositionByOrigin(objCenter, 'center', 'center');
-            }
+                vLine.set('visible', Math.abs(objCenter.x - cx) < 1);
+                hLine.set('visible', Math.abs(objCenter.y - cy) < 1);
+            } else {
+                vLine.set('visible', false);
+                hLine.set('visible', false);
+                
+                // 2. 判斷邊界磁吸 (使用物件實際寬高，忽略光暈陰影)
+                const objW = obj.width * obj.scaleX;
+                const objH = obj.height * obj.scaleY;
+                
+                // 計算實際的左上角座標
+                let targetLeft = obj.originX === 'center' ? obj.left - objW / 2 : obj.left;
+                let targetTop = obj.originY === 'center' ? obj.top - objH / 2 : obj.top;
 
-            // 顯示或隱藏對應的輔助線
-            vLine.set('visible', snappedX);
-            hLine.set('visible', snappedY);
+                // 左右邊界磁吸
+                if (Math.abs(targetLeft) < edgeThreshold) {
+                    targetLeft = 0;
+                } else if (Math.abs(targetLeft + objW - canvasWidth) < edgeThreshold) {
+                    targetLeft = canvasWidth - objW;
+                }
+
+                // 上下邊界磁吸
+                if (Math.abs(targetTop) < edgeThreshold) {
+                    targetTop = 0;
+                } else if (Math.abs(targetTop + objH - canvasHeight) < edgeThreshold) {
+                    targetTop = canvasHeight - objH;
+                }
+
+                // 套用修正後的座標
+                obj.set('left', obj.originX === 'center' ? targetLeft + objW / 2 : targetLeft);
+                obj.set('top', obj.originY === 'center' ? targetTop + objH / 2 : targetTop);
+            }
+            
+            obj.setCoords();
         }
 
-        // --- 將 4000x3000 的虛擬畫布縮放至視覺容器內 ---
+        // --- 邊界磁吸對齊邏輯 (縮放時) ---
+        function handleScaling(e) {
+            const obj = e.target;
+            if (!obj || obj === referenceBox || obj === vLine || obj === hLine) return;
+            
+            if (obj.angle !== 0) return; // 旋轉時不作邊界吸附
+
+            const edgeThreshold = 30;
+            const corner = e.transform ? e.transform.corner : null;
+            if (!corner) return;
+
+            // 計算目前縮放下的實際寬高與左上角位置 (忽略陰影)
+            const objW = obj.width * obj.scaleX;
+            const objH = obj.height * obj.scaleY;
+            const currentLeft = obj.originX === 'center' ? obj.left - objW / 2 : obj.left;
+            const currentTop = obj.originY === 'center' ? obj.top - objH / 2 : obj.top;
+            
+            const currentRight = currentLeft + objW;
+            const currentBottom = currentTop + objH;
+
+            let snappedScale = null;
+
+            // 判斷是往哪個方向拉動並計算貼齊邊界需要的 scale
+            // 往右側邊界 (拖曳右邊控制點)
+            if (['tr', 'mr', 'br'].includes(corner) && Math.abs(currentRight - canvasWidth) < edgeThreshold) {
+                snappedScale = (canvasWidth - currentLeft) / obj.width;
+            }
+            // 往下側邊界 (拖曳下方控制點)
+            else if (['bl', 'mb', 'br'].includes(corner) && Math.abs(currentBottom - canvasHeight) < edgeThreshold) {
+                snappedScale = (canvasHeight - currentTop) / obj.height;
+            }
+            // 往左側邊界 (拖曳左邊控制點)
+            else if (['tl', 'ml', 'bl'].includes(corner) && Math.abs(currentLeft) < edgeThreshold) {
+                snappedScale = currentRight / obj.width; // 以右側為定點反推
+            }
+            // 往上側邊界 (拖曳上方控制點)
+            else if (['tl', 'mt', 'tr'].includes(corner) && Math.abs(currentTop) < edgeThreshold) {
+                snappedScale = currentBottom / obj.height; // 以底部為定點反推
+            }
+
+            // 如果有觸發吸附，則覆寫縮放比例與位置
+            if (snappedScale !== null) {
+                obj.set({ scaleX: snappedScale, scaleY: snappedScale }); // 強制等比縮放，避免變形
+
+                // 因為 Fabric 的縮放會改變 top/left，需要根據固定的對向邊把座標反推回來
+                if (['tl', 'ml', 'bl'].includes(corner)) {
+                    const newLeft = currentRight - (obj.width * snappedScale);
+                    obj.set('left', obj.originX === 'center' ? newLeft + (obj.width * snappedScale) / 2 : newLeft);
+                }
+                
+                if (['tl', 'mt', 'tr'].includes(corner)) {
+                    const newTop = currentBottom - (obj.height * snappedScale);
+                    obj.set('top', obj.originY === 'center' ? newTop + (obj.height * snappedScale) / 2 : newTop);
+                }
+                
+                obj.setCoords(); // 更新選取框的位置
+            }
+        }
+
+        // --- 將虛擬畫布縮放至視覺容器內 ---
         function resizeCanvasToFit() {
             const container = document.getElementById('canvas-container');
             const wrapper = document.getElementById('canvas-wrapper');
@@ -326,17 +430,50 @@
             const availableHeight = container.clientHeight - padding;
 
             // 計算縮放比例
-            const scaleX = availableWidth / CANVAS_WIDTH;
-            const scaleY = availableHeight / CANVAS_HIEGHT;
+            const scaleX = availableWidth / canvasWidth;
+            const scaleY = availableHeight / canvasHeight;
             const scale = Math.min(scaleX, scaleY);
 
-            // 使用 Fabric 的 setZoom，讓內部座標系統維持 4000x3000，但外觀縮小
+            // 使用 Fabric 的 setZoom，讓內部座標系統維持設定尺寸，但外觀縮小
             canvas.setDimensions({
-                width: CANVAS_WIDTH * scale,
-                height: CANVAS_HIEGHT * scale
+                width: canvasWidth * scale,
+                height: canvasHeight * scale
             });
             canvas.setZoom(scale);
         }
+
+        // --- 更新自訂畫布大小 ---
+        const canvasWidthInput = document.getElementById('canvas-width-input');
+        const canvasHeightInput = document.getElementById('canvas-height-input');
+        const hintCanvasSize = document.getElementById('hint-canvas-size');
+
+        function updateCanvasSize() {
+            canvasWidth = parseInt(canvasWidthInput.value) || 3000;
+            canvasHeight = parseInt(canvasHeightInput.value) || 3000;
+
+            // 更新畫布實際尺寸
+            canvas.setWidth(canvasWidth);
+            canvas.setHeight(canvasHeight);
+
+            // 更新中心輔助線長度與位置
+            vLine.set({ x1: canvasWidth / 2, x2: canvasWidth / 2, y2: canvasHeight });
+            hLine.set({ y1: canvasHeight / 2, y2: canvasHeight / 2, x2: canvasWidth });
+
+            // 重新置中紅色參考線
+            referenceBox.set({ left: canvasWidth / 2, top: canvasHeight / 2 });
+            referenceBox.setCoords();
+
+            // 更新背景提示文字
+            hintCanvasSize.textContent = `畫布實際尺寸為 ${canvasWidth} × ${canvasHeight}，目前為縮放預覽模式`;
+
+            // 重新縮放預覽並渲染
+            resizeCanvasToFit();
+            canvas.renderAll();
+        }
+
+        // 綁定輸入框事件
+        canvasWidthInput.addEventListener('change', updateCanvasSize);
+        canvasHeightInput.addEventListener('change', updateCanvasSize);
 
         // --- 剪貼簿貼上功能 (Ctrl+V) ---
         window.addEventListener('paste', function(e) {
@@ -370,7 +507,7 @@
         // --- 將圖片加入畫布並預設套用立體光暈 ---
         function addImageToCanvas(url) {
             fabric.Image.fromURL(url, function(img) {
-                // 為了適應 4000x3000 的大畫布，若圖片太小可稍微放大，但通常原圖匯入即可
+                // 為了適應大畫布，若圖片太小可稍微放大，但通常原圖匯入即可
                 // 設定預設的外光暈/陰影
                 img.set({
                     shadow: new fabric.Shadow({
@@ -388,8 +525,8 @@
                 });
 
                 // 如果圖片大於畫布，則等比縮小
-                if (img.width > CANVAS_WIDTH * 0.8 || img.height > CANVAS_HIEGHT * 0.8) {
-                    img.scaleToWidth(CANVAS_WIDTH * 0.6);
+                if (img.width > canvasWidth * 0.8 || img.height > canvasHeight * 0.8) {
+                    img.scaleToWidth(canvasWidth * 0.6);
                 }
 
                 canvas.add(img);
