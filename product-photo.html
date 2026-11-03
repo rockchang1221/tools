@@ -151,9 +151,9 @@
                     <div>
                         <div class="flex justify-between mb-1">
                             <label class="text-sm font-medium text-gray-700">模糊範圍 (擴散)</label>
-                            <span id="shadow-blur-val" class="text-sm text-gray-500">20px</span>
+                            <span id="shadow-blur-val" class="text-sm text-gray-500">50px</span>
                         </div>
-                        <input type="range" id="shadow-blur" min="0" max="150" step="1" value="20" class="w-full accent-blue-600">
+                        <input type="range" id="shadow-blur" min="0" max="150" step="1" value="50" class="w-full accent-blue-600">
                     </div>
 
                     <!-- 垂直與水平偏移 (製造立體深度) -->
@@ -301,112 +301,127 @@
         // --- 中心與邊界磁吸對齊邏輯 (移動時) ---
         function handleSnapping(e) {
             const obj = e.target;
-            // 確保目標不是參考線或背景物件
             if (!obj || obj === referenceBox || obj === vLine || obj === hLine) return;
+            if (obj.angle !== 0) return; // 避免旋轉後邊界計算問題
 
-            const threshold = 50; // 磁吸距離判定(像素)
+            const threshold = 50; // 中心磁吸範圍
+            const edgeThreshold = 30; // 邊界磁吸範圍
             const cx = canvasWidth / 2;
             const cy = canvasHeight / 2;
+
+            // 使用物件的實際尺寸來計算 (完全忽略光暈等外部視覺元素)
             const objCenter = obj.getCenterPoint();
+            const boundWidth = obj.width * obj.scaleX;
+            const boundHeight = obj.height * obj.scaleY;
 
-            let snappedToCenter = false;
+            let snappedToCenterX = false;
+            let snappedToCenterY = false;
 
-            // 1. 優先判斷中心磁吸
+            // 1. 中心磁吸
             if (Math.abs(objCenter.x - cx) < threshold) {
                 objCenter.x = cx;
-                snappedToCenter = true;
+                snappedToCenterX = true;
             }
             if (Math.abs(objCenter.y - cy) < threshold) {
                 objCenter.y = cy;
-                snappedToCenter = true;
+                snappedToCenterY = true;
             }
 
-            if (snappedToCenter) {
-                // 將物件設定到吸附的中心點
-                obj.setPositionByOrigin(objCenter, 'center', 'center');
-                vLine.set('visible', Math.abs(objCenter.x - cx) < 1);
-                hLine.set('visible', Math.abs(objCenter.y - cy) < 1);
-            } else {
-                vLine.set('visible', false);
-                hLine.set('visible', false);
+            // 2. 邊界磁吸 (若未吸附中心，則檢查四邊)
+            if (!snappedToCenterX) {
+                const objLeftEdge = objCenter.x - (boundWidth / 2);
+                const objRightEdge = objCenter.x + (boundWidth / 2);
+                if (Math.abs(objLeftEdge) < edgeThreshold) {
+                    objCenter.x = boundWidth / 2;
+                } else if (Math.abs(canvasWidth - objRightEdge) < edgeThreshold) {
+                    objCenter.x = canvasWidth - (boundWidth / 2);
+                }
             }
 
-            // 2. 判斷邊界磁吸 (取得畫面實際座標，包含陰影等視覺邊界)
-            obj.setCoords();
-            const br = obj.getBoundingRect();
-            
-            // 邊界磁吸容錯值可以稍微小一點
-            const edgeThreshold = 30;
-
-            // 左右邊界磁吸
-            if (Math.abs(br.left) < edgeThreshold) {
-                obj.set('left', obj.left - br.left);
-            } else if (Math.abs(br.left + br.width - canvasWidth) < edgeThreshold) {
-                obj.set('left', obj.left + (canvasWidth - (br.left + br.width)));
+            if (!snappedToCenterY) {
+                const objTopEdge = objCenter.y - (boundHeight / 2);
+                const objBottomEdge = objCenter.y + (boundHeight / 2);
+                if (Math.abs(objTopEdge) < edgeThreshold) {
+                    objCenter.y = boundHeight / 2;
+                } else if (Math.abs(canvasHeight - objBottomEdge) < edgeThreshold) {
+                    objCenter.y = canvasHeight - (boundHeight / 2);
+                }
             }
 
-            // 上下邊界磁吸
-            if (Math.abs(br.top) < edgeThreshold) {
-                obj.set('top', obj.top - br.top);
-            } else if (Math.abs(br.top + br.height - canvasHeight) < edgeThreshold) {
-                obj.set('top', obj.top + (canvasHeight - (br.top + br.height)));
-            }
+            // 統一更新座標至吸附點
+            obj.setPositionByOrigin(objCenter, 'center', 'center');
+
+            // 輔助線僅在中心對齊時顯示
+            vLine.set('visible', snappedToCenterX);
+            hLine.set('visible', snappedToCenterY);
         }
 
         // --- 邊界磁吸對齊邏輯 (縮放時) ---
         function handleScaling(e) {
             const obj = e.target;
             if (!obj || obj === referenceBox || obj === vLine || obj === hLine) return;
-            
-            // 僅處理未旋轉的物件，避免旋轉後的縮放邊界計算過度複雜
             if (obj.angle !== 0) return;
 
-            const edgeThreshold = 30;
-            const br = obj.getBoundingRect();
             const corner = e.transform ? e.transform.corner : null;
             if (!corner) return;
 
-            let scaleToSet = obj.scaleX; // 預設維持原本比例
+            const edgeThreshold = 30;
+            
+            // 目前的實際尺寸與中心點
+            const boundWidth = obj.width * obj.scaleX;
+            const boundHeight = obj.height * obj.scaleY;
+            const objCenter = obj.getCenterPoint();
+            const leftEdge = objCenter.x - boundWidth / 2;
+            const rightEdge = objCenter.x + boundWidth / 2;
+            const topEdge = objCenter.y - boundHeight / 2;
+            const bottomEdge = objCenter.y + boundHeight / 2;
+
             let doSnap = false;
+            let targetScale = obj.scaleX;
 
-            // 往右邊界縮放 (拖曳右上、右中、右下)
-            if (['tr', 'mr', 'br'].includes(corner)) {
-                if (Math.abs(br.left + br.width - canvasWidth) < edgeThreshold) {
-                    scaleToSet = (canvasWidth - obj.left) / obj.width;
-                    doSnap = true;
-                }
-            }
-            // 往下邊界縮放 (拖曳左下、中下、右下)
-            if (['bl', 'mb', 'br'].includes(corner)) {
-                if (Math.abs(br.top + br.height - canvasHeight) < edgeThreshold) {
-                    scaleToSet = (canvasHeight - obj.top) / obj.height;
-                    doSnap = true;
-                }
-            }
-            // 往左邊界縮放 (拖曳左上、左中、左下)
-            if (['tl', 'ml', 'bl'].includes(corner)) {
-                if (Math.abs(br.left) < edgeThreshold) {
-                    let rightEdge = obj.left + (obj.width * obj.scaleX);
-                    scaleToSet = rightEdge / obj.width;
-                    obj.set('left', 0); // 強制左側座標為 0
-                    doSnap = true;
-                }
-            }
-            // 往上邊界縮放 (拖曳左上、中上、右上)
-            if (['tl', 'mt', 'tr'].includes(corner)) {
-                if (Math.abs(br.top) < edgeThreshold) {
-                    let bottomEdge = obj.top + (obj.height * obj.scaleY);
-                    scaleToSet = bottomEdge / obj.height;
-                    obj.set('top', 0); // 強制頂部座標為 0
-                    doSnap = true;
-                }
+            // 決定縮放的錨點 (Anchor，也就是不動的那一邊)
+            let anchorX = objCenter.x;
+            let anchorY = objCenter.y;
+            
+            if (corner.includes('l')) anchorX = rightEdge;
+            if (corner.includes('r')) anchorX = leftEdge;
+            if (corner.includes('t')) anchorY = bottomEdge;
+            if (corner.includes('b')) anchorY = topEdge;
+
+            // 偵測 X 軸向磁吸
+            if (corner.includes('r') && Math.abs(canvasWidth - rightEdge) < edgeThreshold) {
+                targetScale = (canvasWidth - anchorX) / obj.width;
+                doSnap = true;
+            } else if (corner.includes('l') && Math.abs(leftEdge) < edgeThreshold) {
+                targetScale = (anchorX - 0) / obj.width;
+                doSnap = true;
+            } 
+            // 若 X 軸沒吸附，則偵測 Y 軸向磁吸
+            else if (corner.includes('b') && Math.abs(canvasHeight - bottomEdge) < edgeThreshold) {
+                targetScale = (canvasHeight - anchorY) / obj.height;
+                doSnap = true;
+            } else if (corner.includes('t') && Math.abs(topEdge) < edgeThreshold) {
+                targetScale = (anchorY - 0) / obj.height;
+                doSnap = true;
             }
 
-            // 執行縮放覆寫
             if (doSnap) {
-                // 套用等比例縮放以防商品圖變形
-                obj.set({ scaleX: scaleToSet, scaleY: scaleToSet });
-                obj.setCoords(); // 重新計算控制邊界
+                // 套用新的等比例縮放
+                obj.set({ scaleX: targetScale, scaleY: targetScale });
+                
+                // 根據錨點與新尺寸，精確推算出新的中心點，防止位置偏移
+                const newBoundWidth = obj.width * targetScale;
+                const newBoundHeight = obj.height * targetScale;
+                
+                let newCenterX = objCenter.x;
+                let newCenterY = objCenter.y;
+
+                if (corner.includes('l')) newCenterX = anchorX - newBoundWidth / 2;
+                if (corner.includes('r')) newCenterX = anchorX + newBoundWidth / 2;
+                if (corner.includes('t')) newCenterY = anchorY - newBoundHeight / 2;
+                if (corner.includes('b')) newCenterY = anchorY + newBoundHeight / 2;
+
+                obj.setPositionByOrigin(new fabric.Point(newCenterX, newCenterY), 'center', 'center');
             }
         }
 
@@ -504,7 +519,7 @@
                 img.set({
                     shadow: new fabric.Shadow({
                         color: 'rgba(0,0,0,0.3)',
-                        blur: 20,
+                        blur: 50,
                         offsetX: 0,
                         offsetY: 0
                     }),
