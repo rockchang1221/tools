@@ -151,7 +151,7 @@
                     <div>
                         <div class="flex justify-between mb-1">
                             <label class="text-sm font-medium text-gray-700">模糊範圍 (擴散)</label>
-                            <span id="shadow-blur-val" class="text-sm text-gray-500">60px</span>
+                            <span id="shadow-blur-val" class="text-sm text-gray-500">20px</span>
                         </div>
                         <input type="range" id="shadow-blur" min="0" max="150" step="1" value="60" class="w-full accent-blue-600">
                     </div>
@@ -215,7 +215,7 @@
         // --- 核心變數與常數 ---
         let canvasWidth = 3000;
         let canvasHeight = 3000;
-        const DEFAULT_BG_COLOR = '#fcfcfc';
+        const DEFAULT_BG_COLOR = '#f8f8f8';
         
         let canvas;
         let referenceBox, vLine, hLine;
@@ -232,8 +232,8 @@
 
             // 繪製紅色虛線參考框 (預設 2500x2500)
             referenceBox = new fabric.Rect({
-                width: 2500,
-                height: 2500,
+                width: 2000,
+                height: 2000,
                 left: canvasWidth / 2,
                 top: canvasHeight / 2,
                 originX: 'center',
